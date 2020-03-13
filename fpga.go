@@ -41,6 +41,8 @@ const (
 	UserFile       = "user_pf"
 	VendorFile     = "vendor"
 	DeviceFile     = "device"
+	ReadyFile      = "ready"
+	FPGAReady      = "0x1"
 	XilinxVendorID = "0x10ee"
 	ADVANTECH_ID   = "0x13fe"
 	AWS_ID         = "0x1d0f"
@@ -66,20 +68,20 @@ func GetInstance(DBDF string) (string, error) {
 	strArray := strings.Split(DBDF, ":")
 	domain, err := strconv.ParseUint(strArray[0], 16, 16)
 	if err != nil {
-		return "", fmt.Errorf("strconv failed: %s\n", strArray[0])
+		return "", fmt.Errorf("strconv failed: %s", strArray[0])
 	}
 	bus, err := strconv.ParseUint(strArray[1], 16, 8)
 	if err != nil {
-		return "", fmt.Errorf("strconv failed: %s\n", strArray[1])
+		return "", fmt.Errorf("strconv failed: %s", strArray[1])
 	}
 	strArray = strings.Split(strArray[2], ".")
 	dev, err := strconv.ParseUint(strArray[0], 16, 8)
 	if err != nil {
-		return "", fmt.Errorf("strconv failed: %s\n", strArray[0])
+		return "", fmt.Errorf("strconv failed: %s", strArray[0])
 	}
 	fc, err := strconv.ParseUint(strArray[1], 16, 8)
 	if err != nil {
-		return "", fmt.Errorf("strconv failed: %s\n", strArray[1])
+		return "", fmt.Errorf("strconv failed: %s", strArray[1])
 	}
 	ret := domain*65536 + bus*256 + dev*8 + fc
 	return strconv.FormatUint(ret, 10), nil
@@ -174,13 +176,22 @@ func GetDevices() ([]Device, error) {
 		// so mgmt in Pair may be empty
 		if IsUserPf(pciID) { //user pf
 			userDBDF := pciID
+			// skip FPGAs that are not ready
+			fname = path.Join(SysfsDevices, pciID, ReadyFile)
+			content, err := GetFileContent(fname)
+			if err != nil {
+				return nil, err
+			}
+			if strings.Compare(content, FPGAReady) != 0 {
+				continue
+			}
 			romFolder, err := GetFileNameFromPrefix(path.Join(SysfsDevices, pciID), ROMSTR)
 			if err != nil {
 				return nil, err
 			}
 			// get dsa version
 			fname = path.Join(SysfsDevices, pciID, romFolder, DSAverFile)
-			content, err := GetFileContent(fname)
+			content, err = GetFileContent(fname)
 			if err != nil {
 				return nil, err
 			}
