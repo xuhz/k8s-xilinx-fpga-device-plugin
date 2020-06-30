@@ -32,6 +32,7 @@ import (
 const (
 	resourceNamePrefix = "xilinx.com/fpga"
 	serverSockPath     = pluginapi.DevicePluginPath
+	subdevPath         = "/dev/xfpga"
 )
 
 // FPGADevicePluginServer implements the Kubernetes device plugin API
@@ -341,17 +342,17 @@ func (m *FPGADevicePluginServer) Allocate(ctx context.Context, req *pluginapi.Al
 				ContainerPath: dev.Nodes.User,
 				ReadOnly:      false,
 			})
+			cres.Mounts = append(cres.Mounts, &pluginapi.Mount{
+				HostPath:      subdevPath,
+				ContainerPath: subdevPath,
+				ReadOnly:      true,
+			})
 			// if this device supports qdma, assign the qdma node to pod too
 			if dev.Nodes.Qdma != "" {
 				cres.Devices = append(cres.Devices, &pluginapi.DeviceSpec{
 					HostPath:      dev.Nodes.Qdma,
 					ContainerPath: dev.Nodes.Qdma,
 					Permissions:   "rwm",
-				})
-				cres.Mounts = append(cres.Mounts, &pluginapi.Mount{
-					HostPath:      dev.Nodes.Qdma,
-					ContainerPath: dev.Nodes.Qdma,
-					ReadOnly:      false,
 				})
 			}
 		}

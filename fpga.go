@@ -29,7 +29,7 @@ const (
 	SysfsDevices   = "/sys/bus/pci/devices"
 	MgmtPrefix     = "/dev/xclmgmt"
 	UserPrefix     = "/dev/dri"
-	QdmaPrefix     = "/dev/xfpga"
+	SubdevPrefix   = "/dev/xfpga"
 	QDMASTR        = "dma.qdma.u"
 	UserPFKeyword  = "drm"
 	DRMSTR         = "renderD"
@@ -230,7 +230,7 @@ func GetDevices() ([]Device, error) {
 			}
 
 			if qdmaFolder != "" {
-				pairMap[DBD].Qdma = path.Join(QdmaPrefix, QDMASTR+instance)
+				pairMap[DBD].Qdma = path.Join(SubdevPrefix, QDMASTR+instance)
 			}
 
 			//TODO: check temp, power, fan speed etc, to give a healthy level
