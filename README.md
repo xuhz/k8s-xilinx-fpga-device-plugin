@@ -189,6 +189,9 @@ The image contains verify.xclbin for many types of FPGA, please select the type 
 ## Build
 
 In case you want to build the plugin and/or docker image from source
+
+Install golang first, eg. please refer 
+https://linuxize.com/post/how-to-install-go-on-ubuntu-18-04/
 ```
 $./build
 # sudo docker build -t tag_of_the_docker_image .
