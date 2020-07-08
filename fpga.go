@@ -1,4 +1,4 @@
-// Copyright 2018 Xilinx Corporation. All Rights Reserved.
+// Copyright 2018-2020 Xilinx Corporation. All Rights Reserved.
 // Author: Brian Xu(brianx@xilinx.com)
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,9 +49,10 @@ const (
 )
 
 type Pairs struct {
-	Mgmt string
-	User string
-	Qdma string
+	Mgmt       string
+	User       string
+	SubdevPath string
+	Qdma       string
 }
 
 type Device struct {
@@ -163,9 +164,10 @@ func GetDevices() ([]Device, error) {
 		DBD := pciID[:len(pciID)-2]
 		if _, ok := pairMap[DBD]; !ok {
 			pairMap[DBD] = &Pairs{
-				Mgmt: "",
-				User: "",
-				Qdma: "",
+				Mgmt:       "",
+				User:       "",
+				SubdevPath: SubdevPrefix,
+				Qdma:       "",
 			}
 		}
 

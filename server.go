@@ -1,4 +1,4 @@
-// Portions Copyright 2018 Xilinx Inc.
+// Portions Copyright 2018-2020 Xilinx Inc.
 // Author: Brian Xu(brianx@xilinx.com)
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,7 +32,6 @@ import (
 const (
 	resourceNamePrefix = "xilinx.com/fpga"
 	serverSockPath     = pluginapi.DevicePluginPath
-	subdevPath         = "/dev/xfpga"
 )
 
 // FPGADevicePluginServer implements the Kubernetes device plugin API
@@ -343,8 +342,8 @@ func (m *FPGADevicePluginServer) Allocate(ctx context.Context, req *pluginapi.Al
 				ReadOnly:      false,
 			})
 			cres.Mounts = append(cres.Mounts, &pluginapi.Mount{
-				HostPath:      subdevPath,
-				ContainerPath: subdevPath,
+				HostPath:      dev.Nodes.SubdevPath,
+				ContainerPath: dev.Nodes.SubdevPath,
 				ReadOnly:      true,
 			})
 			// if this device supports qdma, assign the qdma node to pod too
