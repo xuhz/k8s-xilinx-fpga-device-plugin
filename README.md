@@ -195,6 +195,8 @@ https://linuxize.com/post/how-to-install-go-on-ubuntu-18-04/
 ```
 $./build
 # sudo docker build -t tag_of_the_docker_image .
+eg.
+# sudo docker build -t huaxu/xilinx_k8s_fpga_plugin:0001 .
 ```
 Then change the fpga-device-plugin.yaml file to specify the docker image you build
 

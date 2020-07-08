@@ -20,6 +20,7 @@ spec:
   containers:
   - name: mypod
     image: xilinxatg/fpga-verify:latest
+    imagePullPolicy: IfNotPresent
     resources:
       limits:
         xilinx.com/fpga-xilinx_u200_xdma_201820_1-1535712995: 1
