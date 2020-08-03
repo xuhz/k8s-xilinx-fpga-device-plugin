@@ -153,7 +153,7 @@ func GetDevices() ([]Device, error) {
 		fname := path.Join(SysfsDevices, pciID, VendorFile)
 		vendorID, err := GetFileContent(fname)
 		if err != nil {
-			return nil, err
+			continue
 		}
 		if strings.EqualFold(vendorID, XilinxVendorID) != true &&
 			strings.EqualFold(vendorID, AWS_ID) != true &&
@@ -182,40 +182,40 @@ func GetDevices() ([]Device, error) {
 			fname = path.Join(SysfsDevices, pciID, ReadyFile)
 			content, err := GetFileContent(fname)
 			if err != nil {
-				return nil, err
+				continue
 			}
 			if strings.Compare(content, FPGAReady) != 0 {
 				continue
 			}
 			romFolder, err := GetFileNameFromPrefix(path.Join(SysfsDevices, pciID), ROMSTR)
 			if err != nil {
-				return nil, err
+				continue
 			}
 			// get dsa version
 			fname = path.Join(SysfsDevices, pciID, romFolder, DSAverFile)
 			content, err = GetFileContent(fname)
 			if err != nil {
-				return nil, err
+				continue
 			}
 			dsaVer := content
 			// get dsa timestamp
 			fname = path.Join(SysfsDevices, pciID, romFolder, DSAtsFile)
 			content, err = GetFileContent(fname)
 			if err != nil {
-				return nil, err
+				continue
 			}
 			dsaTs := content
 			// get device id
 			fname = path.Join(SysfsDevices, pciID, DeviceFile)
 			content, err = GetFileContent(fname)
 			if err != nil {
-				return nil, err
+				continue
 			}
 			devid := content
 			// get user PF node
 			userpf, err := GetFileNameFromPrefix(path.Join(SysfsDevices, pciID, UserPFKeyword), DRMSTR)
 			if err != nil {
-				return nil, err
+				continue
 			}
 			userNode := path.Join(UserPrefix, userpf)
 			pairMap[DBD].User = userNode
@@ -223,12 +223,12 @@ func GetDevices() ([]Device, error) {
 			//get qdma device node if it exists
 			instance, err := GetInstance(userDBDF)
 			if err != nil {
-				return nil, err
+				continue
 			}
 
 			qdmaFolder, err := GetFileNameFromPrefix(path.Join(SysfsDevices, pciID), QDMASTR)
 			if err != nil {
-				return nil, err
+				continue
 			}
 
 			if qdmaFolder != "" {
@@ -252,7 +252,7 @@ func GetDevices() ([]Device, error) {
 			fname = path.Join(SysfsDevices, pciID, InstanceFile)
 			content, err := GetFileContent(fname)
 			if err != nil {
-				return nil, err
+				continue
 			}
 			pairMap[DBD].Mgmt = MgmtPrefix + content
 		}
