@@ -16,17 +16,17 @@ package main
 
 import (
 	"fmt"
+	log "github.com/Sirupsen/logrus"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/deviceplugin/v1beta1"
 	"net"
 	"os"
 	"path"
 	"reflect"
 	_ "runtime/debug"
+	"strconv"
 	"time"
-
-	log "github.com/Sirupsen/logrus"
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
-	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/deviceplugin/v1beta1"
 )
 
 const (
@@ -69,9 +69,9 @@ func NewFPGADevicePlugin() *FPGADevicePlugin {
 				break
 			}
 			devMap := make(map[string]map[string]Device)
-			for _, device := range devices {
-				DSAtype := device.shellVer + "-" + device.timestamp
-				id := device.DBDF
+			for sn, device := range devices {
+				DSAtype := device.shellVer + "-" + device.timestamp + "-" + strconv.Itoa(len(device.Nodes))
+				id := sn
 				if subMap, ok := devMap[DSAtype]; ok {
 					subMap = devMap[DSAtype]
 					subMap[id] = device
@@ -110,7 +110,7 @@ func (m *FPGADevicePlugin) checkDeviceUpdate(n map[string]map[string]Device) {
 		added[nDevType] = nDevices
 	}
 
-	//log.Debugf("added FPGA device list: %v", added)
+	log.Debugf("added FPGA device list: %v", added)
 	//log.Debugf("removed FPGA device list: %v", removed)
 	//log.Debugf("updated FPGA device list: %v", updated)
 	//create new server for added devices
@@ -270,7 +270,7 @@ func (m *FPGADevicePluginServer) Register(kubeletEndpoint, resourceName string) 
 func (m *FPGADevicePluginServer) sendDevices(s pluginapi.DevicePlugin_ListAndWatchServer) error {
 	resp := new(pluginapi.ListAndWatchResponse)
 	for _, device := range m.devices {
-		resp.Devices = append(resp.Devices, &pluginapi.Device{device.DBDF, device.Healthy})
+		resp.Devices = append(resp.Devices, &pluginapi.Device{device.sn, device.Healthy})
 	}
 	log.Printf("Sending %d device(s) %v to kubelet", len(resp.Devices), resp.Devices)
 	if err := s.Send(resp); err != nil {
@@ -303,7 +303,7 @@ func (m *FPGADevicePluginServer) Allocate(ctx context.Context, req *pluginapi.Al
 		cres := new(pluginapi.ContainerAllocateResponse)
 		for _, id := range creq.DevicesIDs {
 			log.Printf("Receiving request %s", id)
-			dev, ok := m.devices[id]
+			devs, ok := m.devices[id]
 			if !ok {
 				return nil, fmt.Errorf("Invalid allocation request with non-existing device %s", id)
 			}
@@ -311,48 +311,30 @@ func (m *FPGADevicePluginServer) Allocate(ctx context.Context, req *pluginapi.Al
 				return nil, fmt.Errorf("invalid allocation request: unknown device: %s", id)
 			}
 
-			// Before we have mgmt and user pf separated, we add both to the device cgroup.
-			// It is still safe with mgmt pf assigned to container since xilinx device driver
-			// makes sure flashing DSA(shell) through mgmt pf in container is denied.
-			// This is not good. we will change that later, then only the user pf node is
-			// required to be assigned to container(device cgroup of the container)
-			//
-			// When containers are on top of VM, it is possible only user PF is assigned
-			// to VM, so the Mgmt is empty. Don't add it to cgroup in that case
-			if dev.Nodes.Mgmt != "" {
+			for _, dev := range devs.Nodes {
 				cres.Devices = append(cres.Devices, &pluginapi.DeviceSpec{
-					HostPath:      dev.Nodes.Mgmt,
-					ContainerPath: dev.Nodes.Mgmt,
+					HostPath:      dev.User,
+					ContainerPath: dev.User,
 					Permissions:   "rwm",
 				})
 				cres.Mounts = append(cres.Mounts, &pluginapi.Mount{
-					HostPath:      dev.Nodes.Mgmt,
-					ContainerPath: dev.Nodes.Mgmt,
+					HostPath:      dev.User,
+					ContainerPath: dev.User,
 					ReadOnly:      false,
 				})
-			}
-			cres.Devices = append(cres.Devices, &pluginapi.DeviceSpec{
-				HostPath:      dev.Nodes.User,
-				ContainerPath: dev.Nodes.User,
-				Permissions:   "rwm",
-			})
-			cres.Mounts = append(cres.Mounts, &pluginapi.Mount{
-				HostPath:      dev.Nodes.User,
-				ContainerPath: dev.Nodes.User,
-				ReadOnly:      false,
-			})
-			cres.Mounts = append(cres.Mounts, &pluginapi.Mount{
-				HostPath:      dev.Nodes.SubdevPath,
-				ContainerPath: dev.Nodes.SubdevPath,
-				ReadOnly:      true,
-			})
-			// if this device supports qdma, assign the qdma node to pod too
-			if dev.Nodes.Qdma != "" {
-				cres.Devices = append(cres.Devices, &pluginapi.DeviceSpec{
-					HostPath:      dev.Nodes.Qdma,
-					ContainerPath: dev.Nodes.Qdma,
-					Permissions:   "rwm",
+				cres.Mounts = append(cres.Mounts, &pluginapi.Mount{
+					HostPath:      dev.SubdevPath,
+					ContainerPath: dev.SubdevPath,
+					ReadOnly:      true,
 				})
+				// if this device supports qdma, assign the qdma node to pod too
+				if dev.Qdma != "" {
+					cres.Devices = append(cres.Devices, &pluginapi.DeviceSpec{
+						HostPath:      dev.Qdma,
+						ContainerPath: dev.Qdma,
+						Permissions:   "rwm",
+					})
+				}
 			}
 		}
 		response.ContainerResponses = append(response.ContainerResponses, cres)

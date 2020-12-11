@@ -27,16 +27,16 @@ import (
 
 const (
 	SysfsDevices   = "/sys/bus/pci/devices"
-	MgmtPrefix     = "/dev/xclmgmt"
 	UserPrefix     = "/dev/dri"
 	SubdevPrefix   = "/dev/xfpga"
 	QDMASTR        = "dma.qdma.u"
 	UserPFKeyword  = "drm"
 	DRMSTR         = "renderD"
-	ROMSTR         = "rom"
+	ROMSTR         = "rom.u"
 	DSAverFile     = "VBNV"
 	DSAtsFile      = "timestamp"
-	InstanceFile   = "instance"
+	XMCSTR         = "xmc.u"
+	SerialNumFile  = "serial_num"
 	MgmtFile       = "mgmt_pf"
 	UserFile       = "user_pf"
 	VendorFile     = "vendor"
@@ -48,21 +48,20 @@ const (
 	AWS_ID         = "0x1d0f"
 )
 
-type Pairs struct {
-	Mgmt       string
+type Node struct {
 	User       string
 	SubdevPath string
 	Qdma       string
+	DBDF       string // this is for user pf
+	deviceID   string //devid of the user pf
 }
 
 type Device struct {
-	index     string
+	sn        string
 	shellVer  string
 	timestamp string
-	DBDF      string // this is for user pf
-	deviceID  string //devid of the user pf
 	Healthy   string
-	Nodes     *Pairs
+	Nodes     []Node
 }
 
 func GetInstance(DBDF string) (string, error) {
@@ -139,9 +138,8 @@ func IsUserPf(pciID string) bool {
 	return FileExist(fname)
 }
 
-func GetDevices() ([]Device, error) {
-	var devices []Device
-	pairMap := make(map[string]*Pairs)
+func GetDevices() (map[string]Device, error) {
+	devices := make(map[string]Device)
 	pciFiles, err := ioutil.ReadDir(SysfsDevices)
 	if err != nil {
 		return nil, fmt.Errorf("Can't read folder %s", SysfsDevices)
@@ -161,21 +159,9 @@ func GetDevices() ([]Device, error) {
 			continue
 		}
 
-		DBD := pciID[:len(pciID)-2]
-		if _, ok := pairMap[DBD]; !ok {
-			pairMap[DBD] = &Pairs{
-				Mgmt:       "",
-				User:       "",
-				SubdevPath: SubdevPrefix,
-				Qdma:       "",
-			}
-		}
-
-		// For containers deployed on top of baremetal machines, xilinx FPGA
-		// in sysfs will always appear as pair of mgmt PF and user PF
-		// For containers deployed on top of VM, there may be only user PF
-		// available(mgmt PF is not assigned to the VM)
-		// so mgmt in Pair may be empty
+		// For containers deployed either on top of baremetal machines,
+		// or deployed on top of VM, there may be only user PF assigned
+		// to vm(mgmt PF is not assigned to the VM)
 		if IsUserPf(pciID) { //user pf
 			userDBDF := pciID
 			// skip FPGAs that are not ready
@@ -187,11 +173,22 @@ func GetDevices() ([]Device, error) {
 			if strings.Compare(content, FPGAReady) != 0 {
 				continue
 			}
+			// get SN
+			xmcFolder, err := GetFileNameFromPrefix(path.Join(SysfsDevices, pciID), XMCSTR)
+			if err != nil {
+				continue
+			}
+			fname = path.Join(SysfsDevices, pciID, xmcFolder, SerialNumFile)
+			content, err = GetFileContent(fname)
+			if err != nil {
+				continue
+			}
+			sn := content
+			// get dsa version
 			romFolder, err := GetFileNameFromPrefix(path.Join(SysfsDevices, pciID), ROMSTR)
 			if err != nil {
 				continue
 			}
-			// get dsa version
 			fname = path.Join(SysfsDevices, pciID, romFolder, DSAverFile)
 			content, err = GetFileContent(fname)
 			if err != nil {
@@ -218,7 +215,14 @@ func GetDevices() ([]Device, error) {
 				continue
 			}
 			userNode := path.Join(UserPrefix, userpf)
-			pairMap[DBD].User = userNode
+
+			node := Node{
+				DBDF:       userDBDF,
+				deviceID:   devid,
+				User:       userNode,
+				SubdevPath: SubdevPrefix,
+				Qdma:       "",
+			}
 
 			//get qdma device node if it exists
 			instance, err := GetInstance(userDBDF)
@@ -232,29 +236,28 @@ func GetDevices() ([]Device, error) {
 			}
 
 			if qdmaFolder != "" {
-				pairMap[DBD].Qdma = path.Join(SubdevPrefix, QDMASTR+instance)
+				node.Qdma = path.Join(SubdevPrefix, QDMASTR+instance)
 			}
 
 			//TODO: check temp, power, fan speed etc, to give a healthy level
 			//so far, return Healthy
 			healthy := pluginapi.Healthy
-			devices = append(devices, Device{
-				index:     strconv.Itoa(len(devices) + 1),
-				shellVer:  dsaVer,
-				timestamp: dsaTs,
-				DBDF:      userDBDF,
-				deviceID:  devid,
-				Healthy:   healthy,
-				Nodes:     pairMap[DBD],
-			})
-		} else if IsMgmtPf(pciID) { //mgmt pf
-			// get mgmt instance
-			fname = path.Join(SysfsDevices, pciID, InstanceFile)
-			content, err := GetFileContent(fname)
-			if err != nil {
-				continue
+
+			if _, ok := devices[sn]; ok {
+				device := devices[sn]
+				nodes := device.Nodes
+				nodes = append(nodes, node)
+				device.Nodes = nodes
+				devices[sn] = device
+			} else {
+				devices[sn] = Device{
+					sn:        sn,
+					shellVer:  dsaVer,
+					timestamp: dsaTs,
+					Healthy:   healthy,
+					Nodes:     []Node{node},
+				}
 			}
-			pairMap[DBD].Mgmt = MgmtPrefix + content
 		}
 	}
 	return devices, nil
@@ -267,8 +270,9 @@ func main() {
 		fmt.Printf("%s !!!\n", err)
 		return
 	}
-	for _, device := range devices {
-		fmt.Printf("%v", device)
+	for sn, device := range devices {
+		fmt.Printf("S/N: %s\n", sn)
+		fmt.Printf("%v\n", device)
 	}
 }
 */
